@@ -78,7 +78,19 @@ func (dict *diccionarioImplementacion[K, V]) redimensionar() {
 	dict.tablaValores = nuevaTabla
 }
 
+func (dict diccionarioImplementacion[K, V]) buscar(index int, clave K) IterDiccionario[K,V] {
+	//Este iterador es de DICT
+	for iter := dict.tablaValores[index].Iterador(); iter.HaySiguiente(); {
+		if iter.VerActual().clave == clave {
+			return iter
+		}
+		iter.HaySiguiente()
+	}
+	return nil
+}
+
 func (dict *diccionarioImplementacion[K, V]) guardarEnTabla(tabla []TDALista.Lista[elementoTabla[K, V]], indice int, clave K, dato V) {
+	//!! Este iterador es de lista, NO DICT.
 	for iter := tabla[indice].Iterador(); iter.HaySiguiente(); {
 		if iter.VerActual().clave == clave {
 			iter.VerActual().valor = dato
@@ -113,12 +125,9 @@ func (dict *diccionarioImplementacion[K, V]) Guardar(clave K, dato V) {
 func (dict diccionarioImplementacion[K, V]) Pertenece(clave K) bool {
 	index := posicionEnTabla(clave, len(dict.tablaValores))
 	if !dict.tablaValores[index].EstaVacia() {
-		for iter := dict.tablaValores[index].Iterador(); iter.HaySiguiente(); {
-			if iter.VerActual().clave == clave {
+		if  dict.buscar(index, clave) != nil {
 				return true
 			}
-			iter.Siguiente()
-		}
 	}
 	return false
 }
@@ -128,11 +137,9 @@ func (dict diccionarioImplementacion[K, V]) Pertenece(clave K) bool {
 func (dict diccionarioImplementacion[K, V]) Obtener(clave K) V {
 	index := posicionEnTabla(clave, len(dict.tablaValores))
 	if !dict.tablaValores[index].EstaVacia() {
-		for iter := dict.tablaValores[index].Iterador(); iter.HaySiguiente(); {
-			if iter.VerActual().clave == clave {
-				return iter.VerActual().valor
-			}
-			iter.Siguiente()
+		dato := dict.buscar(index, clave)
+		if dato != nil {
+			return dato.VerActual().valor
 		}
 	}
 	panic("La clave no pertenece al diccionario")
@@ -143,10 +150,9 @@ func (dict diccionarioImplementacion[K, V]) Obtener(clave K) V {
 func (dict *diccionarioImplementacion[K, V]) Borrar(clave K) V {
 	index := posicionEnTabla(clave, len(dict.tablaValores))
 	if !dict.tablaValores[index].EstaVacia() {
-		for iter := dict.tablaValores[index].Iterador(); iter.HaySiguiente(); {
-			if iter.VerActual().clave == clave {
-				return iter.Borrar().valor
-			}
+		dato := dict.buscar(index, clave)
+		if dato != nil {
+				return dato.Borrar().valor
 		}
 	}
 	panic("La clave no pertenece al diccionario")
