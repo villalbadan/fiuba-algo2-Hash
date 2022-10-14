@@ -3,12 +3,13 @@ package diccionario
 import (
 	TDALista "diccionario/lista"
 	"fmt"
+	hash "hash/adler32"
 )
 
 const (
 	CAPACIDAD_INICIAL  = 101
-	MAX_FC             = 0.8
-	MIN_FC             = 0.2
+	MAX_FC             = 0.9
+	MIN_FC             = 0.1
 	FACTOR_REDIMENSION = 2
 )
 
@@ -47,22 +48,27 @@ func convertirABytes[K comparable](clave K) []byte {
 }
 
 func posicionEnTabla[K comparable](clave K, largo int) int {
-	return jenkins(convertirABytes(clave), largo)
+	return funcionHash(convertirABytes(clave), largo)
 }
 
-func jenkins(clave []byte, largo int) int {
-	var hash byte
-	for _, b := range clave {
-		hash += b
-		hash += (hash << 10)
-		hash ^= (hash >> 6)
-	}
-
-	hash += (hash << 3)
-	hash ^= (hash >> 11)
-	hash += (hash << 15)
-	return int(hash) % largo
+func funcionHash(clave []byte, largo int) int {
+	posicion := hash.Checksum(clave) % uint32(largo)
+	return int(posicion)
 }
+
+//func jenkins(clave []byte, largo int) int {
+//	var hash uint64
+//	for _, b := range clave {
+//		hash += uint64(b)
+//		hash += (hash << 10)
+//		hash ^= (hash >> 6)
+//	}
+//
+//	hash += (hash << 3)
+//	hash ^= (hash >> 11)
+//	hash += (hash << 15)
+//	return int(hash) % largo
+//}
 
 //func sdbmHash(data []byte) uint64 {
 //	var hash uint64
