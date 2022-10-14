@@ -67,31 +67,28 @@ func proximoPrimo(n int) int {
 func (dict *diccionarioImplementacion[K, V]) redimensionar() {
 	nuevaCapacidad := proximoPrimo(len(dict.tablaValores) * FACTOR_REDIMENSION)
 	tablaActual := dict.tablaValores
-	nuevaTabla = crearTabla(nuevaCapacidad)
+	nuevaTabla := crearTabla(nuevaCapacidad)
 
 	for iter := dict.Iterador(); iter.HaySiguiente(); {
 		index := posicionEnTabla(iter.VerActual().clave, nuevaCapacidad)
-		dict.guardarEnTabla(index, iter.VerActual().clave, iter.VerActual().valor)
+		dict.guardarEnTabla(nuevaTabla, index, iter.VerActual().clave, iter.VerActual().valor)
 		iter.Siguiente()
 	}
 
 	dict.tablaValores = nuevaTabla
 }
 
-func (dict *diccionarioImplementacion[K, V]) guardarEnTabla(indice int, clave K, dato V) {
-	var guardado bool
-	for iter := dict.tablaValores[indice].Iterador(); iter.HaySiguiente(); {
+func (dict *diccionarioImplementacion[K, V]) guardarEnTabla(tabla []TDALista.Lista[elementoTabla[K, V]], indice int, clave K, dato V) {
+	for iter := tabla[indice].Iterador(); iter.HaySiguiente(); {
 		if iter.VerActual().clave == clave {
 			iter.VerActual().valor = dato
-			guardado = true
-			break
+			return
 		}
 		iter.Siguiente()
 	}
 
-	if !guardado { //lista vacia o clave no esta
-		dict.tablaValores[indice].InsertarUltimo(elementoTabla[K, V]{clave, dato})
-	}
+	//lista vacia o clave no esta
+	tabla[indice].InsertarUltimo(elementoTabla[K, V]{clave, dato})
 }
 
 // Guardar guarda el par clave-dato en el Diccionario. Si la clave ya se encontraba, se actualiza el dato asociado
@@ -102,7 +99,7 @@ func (dict *diccionarioImplementacion[K, V]) Guardar(clave K, dato V) {
 	}
 
 	index := posicionEnTabla(clave, len(dict.tablaValores))
-	dict.guardarEnTabla(index, clave, dato)
+	dict.guardarEnTabla(dict.tablaValores, index, clave, dato)
 	//if dict.tablaValores[index] == nil {
 	//	lista := TDALista.CrearListaEnlazada[elementoTabla[K, V]]()
 	//	lista.InsertarUltimo(elementoTabla[K, V]{clave, dato})
