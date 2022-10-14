@@ -3,11 +3,10 @@ package diccionario
 import (
 	TDALista "diccionario/lista"
 	"fmt"
-	hash "hash/adler32"
 )
 
 const (
-	CAPACIDAD_INICIAL  = 101
+	CAPACIDAD_INICIAL  = 127
 	MAX_FC             = 0.9
 	MIN_FC             = 0.1
 	FACTOR_REDIMENSION = 2
@@ -51,9 +50,38 @@ func posicionEnTabla[K comparable](clave K, largo int) int {
 	return funcionHash(convertirABytes(clave), largo)
 }
 
+/* ###### Hash: adler32
+https://pkg.go.dev/hash/adler32
+
+
 func funcionHash(clave []byte, largo int) int {
 	posicion := hash.Checksum(clave) % uint32(largo)
 	return int(posicion)
+}
+
+*/
+
+/* ###### Hash: jenkins
+Adaptacion de https://github.com/mtchavez/jenkins/blob/master/jenkins.go
+
+*/
+func funcionHash(clave []byte, largo int) int {
+	posicion := jenkins(clave) % uint64(largo)
+	return int(posicion)
+}
+
+func jenkins(clave []byte) uint64 {
+	var hash uint64
+	for _, b := range clave {
+		hash += uint64(b)
+		hash += (hash << 10)
+		hash ^= (hash >> 6)
+	}
+
+	hash += (hash << 3)
+	hash ^= (hash >> 11)
+	hash += (hash << 15)
+	return hash
 }
 
 //func jenkins(clave []byte, largo int) int {
@@ -98,6 +126,13 @@ func proximoPrimo(n int) int {
 	return proximoPrimo(n + 1)
 }
 
+func anteriorPrimo(n int) int {
+	if esPrimo(n) {
+		return n
+	}
+	return proximoPrimo(n - 1)
+}
+
 func (dict dictImplementacion[K, V]) buscar(lista TDALista.Lista[*elementoTabla[K, V]], clave K) TDALista.IteradorLista[*elementoTabla[K, V]] {
 	//Este es un iterador de las listas del dict
 	for iter := lista.Iterador(); iter.HaySiguiente(); {
@@ -140,7 +175,7 @@ func (dict *dictImplementacion[K, V]) redimensionar(nuevaCapacidad int) {
 // Guardar guarda el par clave-dato en el Diccionario. Si la clave ya se encontraba, se actualiza el dato asociado
 func (dict *dictImplementacion[K, V]) Guardar(clave K, dato V) {
 
-	if (float32(len(dict.tablaValores)) / float32(dict.Cantidad())) > MAX_FC {
+	if (float32(dict.Cantidad()) / float32(len(dict.tablaValores))) > MAX_FC {
 		nuevaCapacidad := proximoPrimo(len(dict.tablaValores) * FACTOR_REDIMENSION)
 		dict.redimensionar(nuevaCapacidad)
 	}
@@ -184,10 +219,10 @@ func (dict *dictImplementacion[K, V]) Borrar(clave K) V {
 			borrado := dato.Borrar()
 			dict.elementos--
 
-			if (float32(len(dict.tablaValores)) / float32(dict.Cantidad())) < MIN_FC {
-				nuevaCapacidad := proximoPrimo(len(dict.tablaValores) / FACTOR_REDIMENSION)
-				dict.redimensionar(nuevaCapacidad)
-			}
+			//if (float32(dict.Cantidad()) / float32(len(dict.tablaValores))) < MIN_FC {
+			//	nuevaCapacidad := anteriorPrimo(len(dict.tablaValores) / FACTOR_REDIMENSION)
+			//	dict.redimensionar(nuevaCapacidad)
+			//}
 			return borrado.valor
 		}
 	}
@@ -198,9 +233,6 @@ func (dict *dictImplementacion[K, V]) Borrar(clave K) V {
 func (dict dictImplementacion[K, V]) Cantidad() int {
 	return dict.elementos
 }
-
-// ITERADOR INTERNO
-// #############################################################################################################
 
 func (dict *dictImplementacion[K, V]) Iterar(Sigue func(K, V) bool) {
 	condCorte := false
@@ -216,27 +248,32 @@ func (dict *dictImplementacion[K, V]) Iterar(Sigue func(K, V) bool) {
 	}
 }
 
-// ITERADOR EXTERNO
-// #############################################################################################################
-
-func (dict *dictImplementacion[K, V]) encontrarPrimeraLista() TDALista.Lista[*elementoTabla[K, V]] {
-	for i := range dict.tablaValores {
-		if !dict.tablaValores[i].EstaVacia() {
-			return dict.tablaValores[i]
-		}
-	}
-	return dict.tablaValores[0]
-}
-
 func (dict *dictImplementacion[K, V]) Iterador() IterDiccionario[K, V] {
+	primeraListaVacia, posicion := dict.siguienteLista(0)
+
 	return &iteradorDict[K, V]{
 		diccionario:         dict,
-		iteradorListaActual: dict.encontrarPrimeraLista().Iterador(),
+		iteradorListaActual: primeraListaVacia.Iterador(),
+		posicionListaActual: posicion,
 	}
+
+}
+
+// #############  Primitivas ITERADOR EXTERNO >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+func (dict *dictImplementacion[K, V]) siguienteLista(indiceActual int) (TDALista.Lista[*elementoTabla[K, V]], int) {
+	var posicionesAvanzadas int
+	for i := indiceActual; i < len(dict.tablaValores); i++ {
+		if !dict.tablaValores[i].EstaVacia() {
+			return dict.tablaValores[i], posicionesAvanzadas
+		}
+		posicionesAvanzadas++
+	}
+	return nil, posicionesAvanzadas
 }
 
 func (iter *iteradorDict[K, V]) HaySiguiente() bool {
-	return iter.iteradorListaActual.HaySiguiente()
+	return iter.posicionListaActual < len(iter.diccionario.tablaValores)
 }
 
 func (iter *iteradorDict[K, V]) VerActual() (K, V) {
@@ -247,12 +284,22 @@ func (iter *iteradorDict[K, V]) VerActual() (K, V) {
 }
 
 func (iter *iteradorDict[K, V]) Siguiente() K {
-	claveActual, _ := iter.VerActual()
-	if !iter.iteradorListaActual.HaySiguiente() {
-		if iter.posicionListaActual >= len(iter.diccionario.tablaValores) {
-			panic("El iterador termino de iterar")
-		}
-		iter.posicionListaActual++
+	if !iter.HaySiguiente() {
+		panic("El iterador termino de iterar")
+
 	}
+
+	claveActual, _ := iter.VerActual()
+	iter.iteradorListaActual.Siguiente()
+
+	if !iter.iteradorListaActual.HaySiguiente() {
+		proximaLista, posicionesAvanzadas := iter.diccionario.siguienteLista(iter.posicionListaActual + 1)
+		iter.posicionListaActual += posicionesAvanzadas + 1
+
+		if proximaLista == nil {
+			iter.iteradorListaActual = proximaLista.Iterador()
+		}
+	}
+
 	return claveActual
 }
