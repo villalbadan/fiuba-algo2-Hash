@@ -62,16 +62,36 @@ func proximoPrimo(n int) int {
 	return proximoPrimo(n + 1)
 }
 
+//me falta una vuelta de tuerca para que esto funcione reutilizando el codigo de Guardar
+//ahora mismo esta haciendo cualquier cosa
 func (dict *diccionarioImplementacion[K, V]) redimensionar() {
 	nuevaCapacidad := proximoPrimo(len(dict.tablaValores) * FACTOR_REDIMENSION)
-	nuevaTabla := crearTabla(nuevaCapacidad)
+	tablaActual := dict.tablaValores
+	nuevaTabla = crearTabla(nuevaCapacidad)
 
 	for iter := dict.Iterador(); iter.HaySiguiente(); {
-		nuevaTabla.InsertarUltimo(iter.VerActual())
+		index := posicionEnTabla(iter.VerActual().clave, nuevaCapacidad)
+		dict.guardarEnTabla(index, iter.VerActual().clave, iter.VerActual().valor)
 		iter.Siguiente()
 	}
 
 	dict.tablaValores = nuevaTabla
+}
+
+func (dict *diccionarioImplementacion[K, V]) guardarEnTabla(indice int, clave K, dato V) {
+	var guardado bool
+	for iter := dict.tablaValores[indice].Iterador(); iter.HaySiguiente(); {
+		if iter.VerActual().clave == clave {
+			iter.VerActual().valor = dato
+			guardado = true
+			break
+		}
+		iter.Siguiente()
+	}
+
+	if !guardado { //lista vacia o clave no esta
+		dict.tablaValores[indice].InsertarUltimo(elementoTabla[K, V]{clave, dato})
+	}
 }
 
 // Guardar guarda el par clave-dato en el Diccionario. Si la clave ya se encontraba, se actualiza el dato asociado
@@ -82,24 +102,14 @@ func (dict *diccionarioImplementacion[K, V]) Guardar(clave K, dato V) {
 	}
 
 	index := posicionEnTabla(clave, len(dict.tablaValores))
+	dict.guardarEnTabla(index, clave, dato)
 	//if dict.tablaValores[index] == nil {
 	//	lista := TDALista.CrearListaEnlazada[elementoTabla[K, V]]()
 	//	lista.InsertarUltimo(elementoTabla[K, V]{clave, dato})
 	//	dict.tablaValores[index] = lista
 	//} else {}
-	var guardado bool
-	for iter := dict.tablaValores[index].Iterador(); iter.HaySiguiente(); {
-		if iter.VerActual().clave == clave {
-			iter.VerActual().valor = dato
-			guardado = true
-			break
-		}
-		iter.Siguiente()
-	}
 
-	if !guardado { //lista vacia o clave no esta
-		dict.tablaValores[index].InsertarUltimo(elementoTabla[K, V]{clave, dato})
-	}
+
 }
 
 // Pertenece determina si una clave ya se encuentra en el diccionario, o no
