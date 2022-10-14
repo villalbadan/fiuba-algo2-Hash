@@ -7,7 +7,8 @@ import (
 
 const (
 	CAPACIDAD_INICIAL  = 101
-	FACTOR_DE_CARGA    = 0.8
+	MAX_FC             = 0.8
+	MIN_FC             = 0.2
 	FACTOR_REDIMENSION = 2
 )
 
@@ -28,11 +29,11 @@ type iteradorDict[K comparable, V any] struct {
 }
 
 func crearTabla[K comparable, V any](capacidad int) []TDALista.Lista[*elementoTabla[K, V]] {
-	return make([]TDALista.Lista[*elementoTabla[K, V]], capacidad)
-	//for i := range dict.tablaValores {
-	//lista := TDALista.CrearListaEnlazada[elementoTabla[K, V]]()
-	//} >>> no se si es necesario
-
+	tabla := make([]TDALista.Lista[*elementoTabla[K, V]], capacidad)
+	for i := range tabla {
+		tabla[i] = TDALista.CrearListaEnlazada[*elementoTabla[K, V]]()
+	}
+	return tabla
 }
 
 func CrearHash[K comparable, V any]() Diccionario[K, V] {
@@ -46,18 +47,31 @@ func convertirABytes[K comparable](clave K) []byte {
 }
 
 func posicionEnTabla[K comparable](clave K, largo int) int {
-	return int(sdbmHash(convertirABytes(clave)) % uint64(largo))
+	return jenkins(convertirABytes(clave), largo)
 }
 
-func sdbmHash(data []byte) uint64 {
-	var hash uint64
-
-	for _, b := range data {
-		hash = uint64(b) + (hash << 6) + (hash << 16) - hash
+func jenkins(clave []byte, largo int) int {
+	var hash byte
+	for _, b := range clave {
+		hash += b
+		hash += (hash << 10)
+		hash ^= (hash >> 6)
 	}
 
-	return hash
+	hash += (hash << 3)
+	hash ^= (hash >> 11)
+	hash += (hash << 15)
+	return int(hash) % largo
 }
+
+//func sdbmHash(data []byte) uint64 {
+//	var hash uint64
+//
+//	for _, b := range data {
+//		hash = uint64(b) + (hash << 6) + (hash << 16) - hash
+//	}
+//	return hash
+//}
 
 func esPrimo(n int) bool {
 	if n <= 1 {
@@ -104,8 +118,7 @@ func (dict *dictImplementacion[K, V]) guardarEnTabla(tabla []TDALista.Lista[*ele
 	dict.elementos++
 }
 
-func (dict *dictImplementacion[K, V]) redimensionar() {
-	nuevaCapacidad := proximoPrimo(len(dict.tablaValores) * FACTOR_REDIMENSION)
+func (dict *dictImplementacion[K, V]) redimensionar(nuevaCapacidad int) {
 	nuevaTabla := crearTabla[K, V](nuevaCapacidad)
 
 	for iter := dict.Iterador(); iter.HaySiguiente(); {
@@ -121,8 +134,9 @@ func (dict *dictImplementacion[K, V]) redimensionar() {
 // Guardar guarda el par clave-dato en el Diccionario. Si la clave ya se encontraba, se actualiza el dato asociado
 func (dict *dictImplementacion[K, V]) Guardar(clave K, dato V) {
 
-	if (float32(len(dict.tablaValores)) / float32(dict.Cantidad())) > FACTOR_DE_CARGA {
-		dict.redimensionar()
+	if (float32(len(dict.tablaValores)) / float32(dict.Cantidad())) > MAX_FC {
+		nuevaCapacidad := proximoPrimo(len(dict.tablaValores) * FACTOR_REDIMENSION)
+		dict.redimensionar(nuevaCapacidad)
 	}
 
 	index := posicionEnTabla(clave, len(dict.tablaValores))
@@ -159,8 +173,16 @@ func (dict *dictImplementacion[K, V]) Borrar(clave K) V {
 	index := posicionEnTabla(clave, len(dict.tablaValores))
 	if !dict.tablaValores[index].EstaVacia() {
 		dato := dict.buscar(dict.tablaValores[index], clave)
+
 		if dato != nil {
-			return dato.Borrar().valor
+			borrado := dato.Borrar()
+			dict.elementos--
+
+			if (float32(len(dict.tablaValores)) / float32(dict.Cantidad())) < MIN_FC {
+				nuevaCapacidad := proximoPrimo(len(dict.tablaValores) / FACTOR_REDIMENSION)
+				dict.redimensionar(nuevaCapacidad)
+			}
+			return borrado.valor
 		}
 	}
 	panic("La clave no pertenece al diccionario")
@@ -213,7 +235,7 @@ func (iter *iteradorDict[K, V]) HaySiguiente() bool {
 
 func (iter *iteradorDict[K, V]) VerActual() (K, V) {
 	if !iter.iteradorListaActual.HaySiguiente() {
-		panic("El iter termino de iterar")
+		panic("El iterador termino de iterar")
 	}
 	return iter.iteradorListaActual.VerActual().clave, iter.iteradorListaActual.VerActual().valor
 }
@@ -222,7 +244,7 @@ func (iter *iteradorDict[K, V]) Siguiente() K {
 	claveActual, _ := iter.VerActual()
 	if !iter.iteradorListaActual.HaySiguiente() {
 		if iter.posicionListaActual >= len(iter.diccionario.tablaValores) {
-			panic("El iter termino de iterar")
+			panic("El iterador termino de iterar")
 		}
 		iter.posicionListaActual++
 	}
