@@ -3,17 +3,15 @@ package diccionario
 import (
 	"fmt"
 	hash2 "hash/adler32"
-	"hash/crc64"
 )
 
 const (
-	CAPACIDAD_INICIAL  = 127
+	CAPACIDAD_INICIAL  = 3
 	MAX_FC             = 1
-	MIN_FC             = 0.05
+	MIN_FC             = 0.005
 	FACTOR_REDIMENSION = 2
 	TABLA_VACIA        = 0
 	NO_EN_TABLA        = 0
-	LIM_REHASH         = 100
 	///////////////////////////////
 	PRIMER_HASH  = 1
 	SEGUNDO_HASH = 2
@@ -53,7 +51,6 @@ func convertirABytes[K comparable](clave K) []byte {
 }
 
 func posicionEnTabla(opcion int, claveEnBytes []byte, largo int) int {
-	//ver de pasar la funcion por parametro?
 	switch opcion {
 	case 1:
 		return funcionHash1(claveEnBytes, largo)
@@ -69,7 +66,7 @@ func posicionEnTabla(opcion int, claveEnBytes []byte, largo int) int {
 // ######## FUNCION 1 - JENKINS
 
 //cualquier clave da 48484848 ?????????
-func funcionHash3(clave []byte, largo int) int {
+func funcionHash1(clave []byte, largo int) int {
 	posicion := jenkins(clave) % uint32(largo)
 	return int(posicion)
 }
@@ -93,34 +90,34 @@ func jenkins(clave []byte) uint32 {
 https://pkg.go.dev/hash/adler32
 */
 
-func funcionHash1(clave []byte, largo int) int {
+func funcionHash3(clave []byte, largo int) int {
 	posicion := hash2.Checksum(clave) % uint32(largo)
 	return int(posicion)
 }
 
-// ######## FUNCION 3 - ???
+// ######## FUNCION 3 - CRC64
 //
-func funcionHash2(clave []byte, largo int) int {
-	posicion := crc64.Checksum(clave, crc64.MakeTable(crc64.ISO)) % uint64(largo)
-	return int(posicion)
-}
+//func funcionHash2(clave []byte, largo int) int {
+//	posicion := crc64.Checksum(clave, crc64.MakeTable(crc64.ISO)) % uint64(largo)
+//	return int(posicion)
+//}
 
 // ######## FUNCION 2 - ???
 
-//func funcionHash2(clave []byte, largo int) int {
-//	posicion := djb2(clave) % uint32(largo)
-//	return int(posicion)
-//}
-//
-//func djb2(data []byte) uint32 {
-//	hash := uint32(5381)
-//
-//	for _, b := range data {
-//		hash += uint32(b) + hash + hash<<5
-//	}
-//
-//	return hash
-//}
+func funcionHash2(clave []byte, largo int) int {
+	posicion := djb2(clave) % uint32(largo)
+	return int(posicion)
+}
+
+func djb2(data []byte) uint32 {
+	hash := uint32(5381)
+
+	for _, b := range data {
+		hash += uint32(b) + hash + hash<<5
+	}
+
+	return hash
+}
 
 //############ REDIMENSION -----------------------------------------------------------------------------------------
 
