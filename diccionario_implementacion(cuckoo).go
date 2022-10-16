@@ -3,12 +3,12 @@ package diccionario
 import (
 	"fmt"
 	hash2 "hash/adler32"
-	"hash/maphash"
+	"hash/crc64"
 )
 
 const (
 	CAPACIDAD_INICIAL  = 3
-	MAX_FC             = 0.8
+	MAX_FC             = 1
 	MIN_FC             = 0.1
 	FACTOR_REDIMENSION = 2
 	TABLA_VACIA        = 0
@@ -96,10 +96,8 @@ func funcionHash1(clave []byte, largo int) int {
 // ######## FUNCION 3 - ???
 
 func funcionHash3(clave []byte, largo int) int {
-	var h maphash.Hash
-	valorHasheado, _ := h.Write(clave)
-	posicion := valorHasheado % largo
-	return posicion
+	posicion := crc64.Checksum(clave, crc64.MakeTable(crc64.ISO)) % uint64(largo)
+	return int(posicion)
 }
 
 //############ REDIMENSION -----------------------------------------------------------------------------------------
@@ -135,20 +133,22 @@ func pocaCarga(elementos int, largoTabla int) bool {
 }
 
 func (dict *dictImplementacion[K, V]) redimensionar(nuevaCapacidad int) {
+	var cantidad int
 	nuevaTabla := crearTabla[K, V](nuevaCapacidad)
 
 	for iter := dict.Iterador(); iter.HaySiguiente(); {
 		clave, valor := iter.VerActual()
 		dict.guardarEnTabla(nuevaTabla, clave, valor)
+		cantidad++
 		iter.Siguiente()
 	}
-
+	dict.elementos = cantidad
 	dict.tabla = nuevaTabla
 }
 
-//func sobrecarga (elementos int, largoTabla int) bool {
-//	return float32(elementos) / float32(largoTabla) > MAX_FC
-//}
+func sobrecarga(elementos int, largoTabla int) bool {
+	return float32(elementos)/float32(largoTabla) >= MAX_FC
+}
 
 //TODO cambiar numeros magicos
 func (dict *dictImplementacion[K, V]) buscar(tabla []*elementoTabla[K, V], clave K) (int, int) {
@@ -232,7 +232,7 @@ func (dict *dictImplementacion[K, V]) guardarEnTabla(tabla []*elementoTabla[K, V
 		if !dict.guardarEnOcupado(tabla, elementoAMover, claveAEvaluar, 0) {
 			nuevaCapacidad := proximoPrimo(len(tabla) * FACTOR_REDIMENSION)
 			dict.redimensionar(nuevaCapacidad)
-			dict.Guardar(claveAEvaluar, dato)
+			dict.Guardar(elementoAMover.clave, elementoAMover.valor)
 		}
 	}
 
@@ -240,6 +240,11 @@ func (dict *dictImplementacion[K, V]) guardarEnTabla(tabla []*elementoTabla[K, V
 
 // Guardar guarda el par clave-dato en el Diccionario. Si la clave ya se encontraba, se actualiza el dato asociado
 func (dict *dictImplementacion[K, V]) Guardar(claveAEvaluar K, dato V) {
+	if sobrecarga(dict.elementos+1, len(dict.tabla)) {
+		nuevaCapacidad := proximoPrimo(len(dict.tabla) * FACTOR_REDIMENSION)
+		dict.redimensionar(nuevaCapacidad)
+	}
+
 	dict.guardarEnTabla(dict.tabla, claveAEvaluar, dato)
 
 }
@@ -304,13 +309,13 @@ func (dict *dictImplementacion[K, V]) Iterador() IterDiccionario[K, V] {
 			return &iteradorDict[K, V]{diccionario: dict, posicion: i}
 		}
 	}
-	return &iteradorDict[K, V]{diccionario: dict, posicion: len(dict.tabla) - 1}
+	return &iteradorDict[K, V]{diccionario: dict, posicion: len(dict.tabla)}
 }
 
 // HaySiguiente devuelve si hay más datos para ver. Esto es, si en el lugar donde se encuentra parado
 // el iterador hay un elemento.
 func (iter *iteradorDict[K, V]) HaySiguiente() bool {
-	return iter.diccionario.tabla[iter.posicion] != nil && iter.posicion < len(iter.diccionario.tabla)
+	return iter.posicion < len(iter.diccionario.tabla)
 }
 
 // VerActual devuelve la clave y el dato del elemento actual en el que se encuentra posicionado el iterador.
@@ -331,13 +336,15 @@ func (iter *iteradorDict[K, V]) Siguiente() K {
 	}
 
 	posActual := iter.posicion
+	iter.posicion++
 
-	for i := iter.posicion + 1; i < len(iter.diccionario.tabla); i++ {
-		iter.posicion++
-		if iter.diccionario.tabla[iter.posicion] != nil {
-			break
+	if iter.posicion < len(iter.diccionario.tabla) {
+		for i := iter.posicion; i < len(iter.diccionario.tabla); i++ {
+			if iter.diccionario.tabla[iter.posicion] != nil {
+				break
+			}
+			iter.posicion++
 		}
-		//iter.posicion++
 	}
 
 	return iter.diccionario.tabla[posActual].clave
