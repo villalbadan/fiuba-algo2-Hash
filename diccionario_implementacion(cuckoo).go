@@ -3,13 +3,12 @@ package diccionario
 import (
 	"fmt"
 	hash2 "hash/adler32"
-	"hash/crc64"
 )
 
 const (
 	CAPACIDAD_INICIAL  = 3
 	MAX_FC             = 1
-	MIN_FC             = 0.1
+	MIN_FC             = 0.05
 	FACTOR_REDIMENSION = 2
 	TABLA_VACIA        = 0
 	NO_EN_TABLA        = 0
@@ -48,7 +47,7 @@ func convertirABytes[K comparable](clave K) []byte {
 	return []byte(fmt.Sprintf("%v", clave))
 }
 
-func posicionEnTabla(opcion int, claveEnBytes []byte, largo int) int {
+func posicionEnTabla(opcion int, claveEnBytes []byte, largo int) uint32 {
 	//ver de pasar la funcion por parametro?
 	switch opcion {
 	case 1:
@@ -64,15 +63,16 @@ func posicionEnTabla(opcion int, claveEnBytes []byte, largo int) int {
 
 // ######## FUNCION 1 - JENKINS
 
-func funcionHash2(clave []byte, largo int) int {
-	posicion := jenkins(clave) % uint64(largo)
-	return int(posicion)
+//cualquier clave da 48484848 ?????????
+func funcionHash3(clave []byte, largo int) uint32 {
+	posicion := jenkins(clave) % uint32(largo)
+	return posicion
 }
 
-func jenkins(clave []byte) uint64 {
-	var hash uint64
+func jenkins(clave []byte) uint32 {
+	var hash uint32
 	for _, b := range clave {
-		hash += uint64(b)
+		hash += uint32(b)
 		hash += (hash << 10)
 		hash ^= (hash >> 6)
 	}
@@ -83,21 +83,38 @@ func jenkins(clave []byte) uint64 {
 	return hash
 }
 
-// ######### FUNCION 2 - ADLER32
+// ######### FUNCION 1 - ADLER32
 /* ###### Hash: adler32
 https://pkg.go.dev/hash/adler32
 */
 
-func funcionHash1(clave []byte, largo int) int {
+func funcionHash1(clave []byte, largo int) uint32 {
 	posicion := hash2.Checksum(clave) % uint32(largo)
-	return int(posicion)
+	return posicion
 }
 
 // ######## FUNCION 3 - ???
+//
+//func funcionHash3(clave []byte, largo int) int {
+//	posicion := crc64.Checksum(clave, crc64.MakeTable(crc64.ISO)) % uint64(largo)
+//	return int(posicion)
+//}
 
-func funcionHash3(clave []byte, largo int) int {
-	posicion := crc64.Checksum(clave, crc64.MakeTable(crc64.ISO)) % uint64(largo)
-	return int(posicion)
+// ######## FUNCION 2 - ???
+
+func funcionHash2(clave []byte, largo int) uint32 {
+	posicion := djb2(clave) % uint32(largo)
+	return posicion
+}
+
+func djb2(data []byte) uint32 {
+	hash := uint32(5381)
+
+	for _, b := range data {
+		hash += uint32(b) + hash + hash<<5
+	}
+
+	return hash
 }
 
 //############ REDIMENSION -----------------------------------------------------------------------------------------
@@ -151,7 +168,7 @@ func sobrecarga(elementos int, largoTabla int) bool {
 }
 
 //TODO cambiar numeros magicos
-func (dict *dictImplementacion[K, V]) buscar(tabla []*elementoTabla[K, V], clave K) (int, int) {
+func (dict *dictImplementacion[K, V]) buscar(tabla []*elementoTabla[K, V], clave K) (int, uint32) {
 	claveEnByte := convertirABytes(clave)
 
 	posicionFuncion1 := posicionEnTabla(1, claveEnByte, len(tabla))
@@ -183,31 +200,35 @@ func (dict *dictImplementacion[K, V]) guardarEnOcupado(tabla []*elementoTabla[K,
 	cnt++
 	claveEnByte := convertirABytes(elemento.clave)
 
-	if elemento.opcion == 3 {
-		indice := posicionEnTabla(1, claveEnByte, len(dict.tabla))
-		if dict.tabla[indice] != nil {
-			elementoAMover := tabla[indice]
-			return dict.guardarEnOcupado(tabla, elementoAMover, claveOriginal, cnt)
-		}
-		tabla[indice] = &elementoTabla[K, V]{clave: elemento.clave, valor: elemento.valor, opcion: 1}
-	}
-
 	if elemento.opcion == 1 {
-		indice := posicionEnTabla(2, claveEnByte, len(dict.tabla))
-		if dict.tabla[indice] != nil {
-			elementoAMover := tabla[indice]
-			return dict.guardarEnOcupado(tabla, elementoAMover, claveOriginal, cnt)
+		indice1 := posicionEnTabla(2, claveEnByte, len(dict.tabla))
+		elementoAMover1 := tabla[indice1]
+		tabla[indice1] = &elementoTabla[K, V]{clave: elemento.clave, valor: elemento.valor, opcion: 2}
+
+		if elementoAMover1 != nil {
+			return dict.guardarEnOcupado(tabla, elementoAMover1, claveOriginal, cnt)
 		}
-		tabla[indice] = &elementoTabla[K, V]{clave: elemento.clave, valor: elemento.valor, opcion: 2}
+
 	}
 
 	if elemento.opcion == 2 {
-		indice := posicionEnTabla(3, claveEnByte, len(dict.tabla))
-		if dict.tabla[indice] != nil {
-			elementoAMover := tabla[indice]
-			return dict.guardarEnOcupado(tabla, elementoAMover, claveOriginal, cnt)
+		indice2 := posicionEnTabla(3, claveEnByte, len(dict.tabla))
+		elementoAMover2 := tabla[indice2]
+		tabla[indice2] = &elementoTabla[K, V]{clave: elemento.clave, valor: elemento.valor, opcion: 3}
+
+		if elementoAMover2 != nil {
+			return dict.guardarEnOcupado(tabla, elementoAMover2, claveOriginal, cnt)
 		}
-		tabla[indice] = &elementoTabla[K, V]{clave: elemento.clave, valor: elemento.valor, opcion: 3}
+	}
+
+	if elemento.opcion == 3 {
+		indice3 := posicionEnTabla(1, claveEnByte, len(dict.tabla))
+		elementoAMover3 := tabla[indice3]
+		tabla[indice3] = &elementoTabla[K, V]{clave: elemento.clave, valor: elemento.valor, opcion: 1}
+
+		if elementoAMover3 != nil {
+			return dict.guardarEnOcupado(tabla, elementoAMover3, claveOriginal, cnt)
+		}
 	}
 	return true
 }
@@ -232,7 +253,7 @@ func (dict *dictImplementacion[K, V]) guardarEnTabla(tabla []*elementoTabla[K, V
 		if !dict.guardarEnOcupado(tabla, elementoAMover, claveAEvaluar, 0) {
 			nuevaCapacidad := proximoPrimo(len(tabla) * FACTOR_REDIMENSION)
 			dict.redimensionar(nuevaCapacidad)
-			dict.Guardar(elementoAMover.clave, elementoAMover.valor)
+			dict.Guardar(claveAEvaluar, dato)
 		}
 	}
 
