@@ -3,10 +3,11 @@ package diccionario
 import (
 	"fmt"
 	hash2 "hash/adler32"
+	"hash/crc64"
 )
 
 const (
-	CAPACIDAD_INICIAL  = 3
+	CAPACIDAD_INICIAL  = 127
 	MAX_FC             = 1
 	MIN_FC             = 0.05
 	FACTOR_REDIMENSION = 2
@@ -99,27 +100,27 @@ func funcionHash1(clave []byte, largo int) int {
 
 // ######## FUNCION 3 - ???
 //
-//func funcionHash3(clave []byte, largo int) int {
-//	posicion := crc64.Checksum(clave, crc64.MakeTable(crc64.ISO)) % uint64(largo)
-//	return int(posicion)
-//}
-
-// ######## FUNCION 2 - ???
-
 func funcionHash2(clave []byte, largo int) int {
-	posicion := djb2(clave) % uint32(largo)
+	posicion := crc64.Checksum(clave, crc64.MakeTable(crc64.ISO)) % uint64(largo)
 	return int(posicion)
 }
 
-func djb2(data []byte) uint32 {
-	hash := uint32(5381)
+// ######## FUNCION 2 - ???
 
-	for _, b := range data {
-		hash += uint32(b) + hash + hash<<5
-	}
-
-	return hash
-}
+//func funcionHash2(clave []byte, largo int) int {
+//	posicion := djb2(clave) % uint32(largo)
+//	return int(posicion)
+//}
+//
+//func djb2(data []byte) uint32 {
+//	hash := uint32(5381)
+//
+//	for _, b := range data {
+//		hash += uint32(b) + hash + hash<<5
+//	}
+//
+//	return hash
+//}
 
 //############ REDIMENSION -----------------------------------------------------------------------------------------
 
@@ -191,7 +192,7 @@ func (dict *dictImplementacion[K, V]) buscar(tabla []*elementoTabla[K, V], clave
 
 //TODO borrar codigo repetido
 func (dict *dictImplementacion[K, V]) guardarEnOcupado(tabla []*elementoTabla[K, V], elemento *elementoTabla[K, V], claveOriginal K, cnt int) bool {
-	if elemento.clave == claveOriginal || cnt > LIM_REHASH {
+	if elemento.clave == claveOriginal {
 		return false
 	}
 	cnt++
@@ -201,7 +202,7 @@ func (dict *dictImplementacion[K, V]) guardarEnOcupado(tabla []*elementoTabla[K,
 	if nuevaOpcion > ULTIMO_HASH {
 		nuevaOpcion = PRIMER_HASH
 	}
-	indice := posicionEnTabla(nuevaOpcion, claveEnByte, len(dict.tabla))
+	indice := posicionEnTabla(nuevaOpcion, claveEnByte, len(tabla))
 	elementoAMover := tabla[indice]
 	tabla[indice] = &elementoTabla[K, V]{clave: elemento.clave, valor: elemento.valor, opcion: nuevaOpcion}
 
@@ -336,8 +337,8 @@ func (iter *iteradorDict[K, V]) Siguiente() K {
 	}
 
 	posActual := iter.posicion
-	iter.posicion++
 
+	iter.posicion++
 	if iter.posicion < len(iter.diccionario.tabla) {
 		for i := iter.posicion; i < len(iter.diccionario.tabla); i++ {
 			if iter.diccionario.tabla[iter.posicion] != nil {
