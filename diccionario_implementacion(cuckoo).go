@@ -13,6 +13,10 @@ const (
 	TABLA_VACIA        = 0
 	NO_EN_TABLA        = 0
 	LIM_REHASH         = 100
+	///////////////////////////////
+	PRIMER_HASH  = 1
+	SEGUNDO_HASH = 2
+	ULTIMO_HASH  = 3
 )
 
 type dictImplementacion[K comparable, V any] struct {
@@ -47,7 +51,7 @@ func convertirABytes[K comparable](clave K) []byte {
 	return []byte(fmt.Sprintf("%v", clave))
 }
 
-func posicionEnTabla(opcion int, claveEnBytes []byte, largo int) uint32 {
+func posicionEnTabla(opcion int, claveEnBytes []byte, largo int) int {
 	//ver de pasar la funcion por parametro?
 	switch opcion {
 	case 1:
@@ -64,9 +68,9 @@ func posicionEnTabla(opcion int, claveEnBytes []byte, largo int) uint32 {
 // ######## FUNCION 1 - JENKINS
 
 //cualquier clave da 48484848 ?????????
-func funcionHash3(clave []byte, largo int) uint32 {
+func funcionHash3(clave []byte, largo int) int {
 	posicion := jenkins(clave) % uint32(largo)
-	return posicion
+	return int(posicion)
 }
 
 func jenkins(clave []byte) uint32 {
@@ -88,9 +92,9 @@ func jenkins(clave []byte) uint32 {
 https://pkg.go.dev/hash/adler32
 */
 
-func funcionHash1(clave []byte, largo int) uint32 {
+func funcionHash1(clave []byte, largo int) int {
 	posicion := hash2.Checksum(clave) % uint32(largo)
-	return posicion
+	return int(posicion)
 }
 
 // ######## FUNCION 3 - ???
@@ -102,9 +106,9 @@ func funcionHash1(clave []byte, largo int) uint32 {
 
 // ######## FUNCION 2 - ???
 
-func funcionHash2(clave []byte, largo int) uint32 {
+func funcionHash2(clave []byte, largo int) int {
 	posicion := djb2(clave) % uint32(largo)
-	return posicion
+	return int(posicion)
 }
 
 func djb2(data []byte) uint32 {
@@ -168,28 +172,21 @@ func sobrecarga(elementos int, largoTabla int) bool {
 }
 
 //TODO cambiar numeros magicos
-func (dict *dictImplementacion[K, V]) buscar(tabla []*elementoTabla[K, V], clave K) (int, uint32) {
+func (dict *dictImplementacion[K, V]) buscar(tabla []*elementoTabla[K, V], clave K) (int, int) {
 	claveEnByte := convertirABytes(clave)
 
-	posicionFuncion1 := posicionEnTabla(1, claveEnByte, len(tabla))
-	if dict.elementos == TABLA_VACIA {
-		return NO_EN_TABLA, posicionFuncion1
-	}
-	if tabla[posicionFuncion1] != nil && tabla[posicionFuncion1].clave == clave {
-		return 1, posicionFuncion1
+	for i := PRIMER_HASH; i <= ULTIMO_HASH; i++ {
+		posicion := posicionEnTabla(i, claveEnByte, len(tabla))
+		if dict.elementos == TABLA_VACIA {
+			return NO_EN_TABLA, posicion
+		}
+
+		if tabla[posicion] != nil && tabla[posicion].clave == clave {
+			return i, posicion
+		}
 	}
 
-	posicionFuncion2 := posicionEnTabla(2, claveEnByte, len(tabla))
-	if tabla[posicionFuncion2] != nil && tabla[posicionFuncion2].clave == clave {
-		return 2, posicionFuncion2
-	}
-
-	posicionFuncion3 := posicionEnTabla(3, claveEnByte, len(tabla))
-	if tabla[posicionFuncion3] != nil && tabla[posicionFuncion3].clave == clave {
-		return 3, posicionFuncion3
-	}
-
-	return NO_EN_TABLA, posicionFuncion1
+	return NO_EN_TABLA, posicionEnTabla(PRIMER_HASH, claveEnByte, len(tabla))
 }
 
 //TODO borrar codigo repetido
@@ -200,36 +197,18 @@ func (dict *dictImplementacion[K, V]) guardarEnOcupado(tabla []*elementoTabla[K,
 	cnt++
 	claveEnByte := convertirABytes(elemento.clave)
 
-	if elemento.opcion == 1 {
-		indice1 := posicionEnTabla(2, claveEnByte, len(dict.tabla))
-		elementoAMover1 := tabla[indice1]
-		tabla[indice1] = &elementoTabla[K, V]{clave: elemento.clave, valor: elemento.valor, opcion: 2}
+	nuevaOpcion := elemento.opcion + 1
+	if nuevaOpcion > ULTIMO_HASH {
+		nuevaOpcion = PRIMER_HASH
+	}
+	indice := posicionEnTabla(nuevaOpcion, claveEnByte, len(dict.tabla))
+	elementoAMover := tabla[indice]
+	tabla[indice] = &elementoTabla[K, V]{clave: elemento.clave, valor: elemento.valor, opcion: nuevaOpcion}
 
-		if elementoAMover1 != nil {
-			return dict.guardarEnOcupado(tabla, elementoAMover1, claveOriginal, cnt)
-		}
-
+	if elementoAMover != nil {
+		return dict.guardarEnOcupado(tabla, elementoAMover, claveOriginal, cnt)
 	}
 
-	if elemento.opcion == 2 {
-		indice2 := posicionEnTabla(3, claveEnByte, len(dict.tabla))
-		elementoAMover2 := tabla[indice2]
-		tabla[indice2] = &elementoTabla[K, V]{clave: elemento.clave, valor: elemento.valor, opcion: 3}
-
-		if elementoAMover2 != nil {
-			return dict.guardarEnOcupado(tabla, elementoAMover2, claveOriginal, cnt)
-		}
-	}
-
-	if elemento.opcion == 3 {
-		indice3 := posicionEnTabla(1, claveEnByte, len(dict.tabla))
-		elementoAMover3 := tabla[indice3]
-		tabla[indice3] = &elementoTabla[K, V]{clave: elemento.clave, valor: elemento.valor, opcion: 1}
-
-		if elementoAMover3 != nil {
-			return dict.guardarEnOcupado(tabla, elementoAMover3, claveOriginal, cnt)
-		}
-	}
 	return true
 }
 
