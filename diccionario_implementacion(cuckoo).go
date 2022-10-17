@@ -2,13 +2,15 @@ package diccionario
 
 import (
 	"fmt"
-	hash2 "hash/adler32"
 )
 
 const (
-	CAPACIDAD_INICIAL  = 3
-	MAX_FC             = 1
-	MIN_FC             = 0.005
+	CAPACIDAD_INICIAL  = 127
+	CAPACIDAD_MAXIMA   = 2157587
+	ANTERIOR_PRIMO     = -1
+	PROX_PRIMO         = 1
+	MAX_FC             = 0.99
+	MIN_FC             = 0.1
 	FACTOR_REDIMENSION = 2
 	TABLA_VACIA        = 0
 	NO_EN_TABLA        = 0
@@ -21,6 +23,7 @@ const (
 type dictImplementacion[K comparable, V any] struct {
 	tabla     []*elementoTabla[K, V]
 	elementos int
+	primo     int
 }
 
 type elementoTabla[K comparable, V any] struct {
@@ -64,17 +67,19 @@ func posicionEnTabla(opcion int, claveEnBytes []byte, largo int) int {
 }
 
 // ######## FUNCION 1 - JENKINS
+/* Hash: jenkins one-at-a-time-hash
+https://en.wikipedia.org/wiki/Jenkins_hash_function
+*/
 
-//cualquier clave da 48484848 ?????????
-func funcionHash1(clave []byte, largo int) int {
-	posicion := jenkins(clave) % uint32(largo)
+func funcionHash3(clave []byte, largo int) int {
+	posicion := jenkins(clave) % uint64(largo)
 	return int(posicion)
 }
 
-func jenkins(clave []byte) uint32 {
-	var hash uint32
+func jenkins(clave []byte) uint64 {
+	var hash uint64
 	for _, b := range clave {
-		hash += uint32(b)
+		hash += uint64(b)
 		hash += (hash << 10)
 		hash ^= (hash >> 6)
 	}
@@ -90,21 +95,65 @@ func jenkins(clave []byte) uint32 {
 https://pkg.go.dev/hash/adler32
 */
 
-func funcionHash3(clave []byte, largo int) int {
-	posicion := hash2.Checksum(clave) % uint32(largo)
-	return int(posicion)
-}
+//func funcionHash1(clave []byte, largo int) int {
+//	posicion := hash2.Checksum(clave) % uint32(largo)
+//	return int(posicion)
+//}
 
-// ######## FUNCION 3 - CRC64
-//
-//func funcionHash2(clave []byte, largo int) int {
+//######## FUNCION 3 - CRC64
+
+//func funcionHash1(clave []byte, largo int) int {
 //	posicion := crc64.Checksum(clave, crc64.MakeTable(crc64.ISO)) % uint64(largo)
 //	return int(posicion)
 //}
 
-// ######## FUNCION 2 - ???
+/*######## FUNCION 5 - FNV
+Hash: Fowler–Noll–Vo (FNV)
+https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function
+Implementación de https://golangprojectstructure.com/
+*/
 
 func funcionHash2(clave []byte, largo int) int {
+	posicion := fvnHash(clave) % uint64(largo)
+	return int(posicion)
+}
+
+const (
+	uint64Offset uint64 = 0xcbf29ce484222325
+	uint64Prime  uint64 = 0x00000100000001b3
+)
+
+func fvnHash(data []byte) (hash uint64) {
+	hash = uint64Offset
+
+	for _, b := range data {
+		hash ^= uint64(b)
+		hash *= uint64Prime
+	}
+
+	return
+}
+
+////####### FUNCION SDBM
+//
+//func funcionHash2(clave []byte, largo int) int {
+//	posicion := sdbmHash(clave) % uint64(largo)
+//	return int(posicion)
+//}
+//
+//func sdbmHash(data []byte) uint64 {
+//	var hash uint64
+//
+//	for _, b := range data {
+//		hash = uint64(b) + (hash << 6) + (hash << 16) - hash
+//	}
+//
+//	return hash
+//}
+
+// ######## FUNCION 2 - DJB2
+
+func funcionHash1(clave []byte, largo int) int {
 	posicion := djb2(clave) % uint32(largo)
 	return int(posicion)
 }
@@ -121,30 +170,15 @@ func djb2(data []byte) uint32 {
 
 //############ REDIMENSION -----------------------------------------------------------------------------------------
 
-func esPrimo(n int) bool {
-	if n <= 1 {
-		return false
-	}
-	for i := 2; i*i <= n; i++ {
-		if n%i == 0 {
-			return false
-		}
-	}
-	return true
-}
+func (dict *dictImplementacion[K, V]) nuevaCapacidad(pos int, movimiento int) int {
+	arrayPrimos := []int{CAPACIDAD_INICIAL, 257, 523, 1049, 2099, 4201, 8419, 16843, 33703, 67409, 134837, 269683, 539389, 1078787, CAPACIDAD_MAXIMA}
 
-func proximoPrimo(n int) int {
-	if esPrimo(n) {
-		return n
+	if pos+movimiento > len(arrayPrimos) {
+		panic("Por ahora no puede hacer un hash tan grande, lo sentimos.")
 	}
-	return proximoPrimo(n + 1)
-}
 
-func anteriorPrimo(n int) int {
-	if esPrimo(n) {
-		return n
-	}
-	return anteriorPrimo(n - 1)
+	dict.primo = dict.primo + movimiento
+	return arrayPrimos[pos+movimiento]
 }
 
 func pocaCarga(elementos int, largoTabla int) bool {
@@ -201,7 +235,7 @@ func (dict *dictImplementacion[K, V]) guardarEnOcupado(tabla []*elementoTabla[K,
 	}
 	indice := posicionEnTabla(nuevaOpcion, claveEnByte, len(tabla))
 	elementoAMover := tabla[indice]
-	tabla[indice] = &elementoTabla[K, V]{clave: elemento.clave, valor: elemento.valor, opcion: nuevaOpcion}
+	(tabla[indice]) = &elementoTabla[K, V]{clave: elemento.clave, valor: elemento.valor, opcion: nuevaOpcion}
 
 	if elementoAMover != nil {
 		return dict.guardarEnOcupado(tabla, elementoAMover, claveOriginal, cnt)
@@ -228,8 +262,8 @@ func (dict *dictImplementacion[K, V]) guardarEnTabla(tabla []*elementoTabla[K, V
 	//Posición no vacia, comenzamos a mover
 	if elementoAMover != nil {
 		if !dict.guardarEnOcupado(tabla, elementoAMover, claveAEvaluar, 0) {
-			nuevaCapacidad := proximoPrimo(len(tabla) * FACTOR_REDIMENSION)
-			dict.redimensionar(nuevaCapacidad)
+			capacidad := dict.nuevaCapacidad(dict.primo, PROX_PRIMO)
+			dict.redimensionar(capacidad)
 			dict.Guardar(claveAEvaluar, dato)
 		}
 	}
@@ -239,8 +273,8 @@ func (dict *dictImplementacion[K, V]) guardarEnTabla(tabla []*elementoTabla[K, V
 // Guardar guarda el par clave-dato en el Diccionario. Si la clave ya se encontraba, se actualiza el dato asociado
 func (dict *dictImplementacion[K, V]) Guardar(claveAEvaluar K, dato V) {
 	if sobrecarga(dict.elementos+1, len(dict.tabla)) {
-		nuevaCapacidad := proximoPrimo(len(dict.tabla) * FACTOR_REDIMENSION)
-		dict.redimensionar(nuevaCapacidad)
+		capacidad := dict.nuevaCapacidad(dict.primo, PROX_PRIMO)
+		dict.redimensionar(capacidad)
 	}
 
 	dict.guardarEnTabla(dict.tabla, claveAEvaluar, dato)
@@ -276,8 +310,8 @@ func (dict *dictImplementacion[K, V]) Borrar(clave K) V {
 	dict.elementos--
 
 	if pocaCarga(dict.elementos, len(dict.tabla)) {
-		nuevaCapacidad := anteriorPrimo(len(dict.tabla) / FACTOR_REDIMENSION)
-		dict.redimensionar(nuevaCapacidad)
+		capacidad := dict.nuevaCapacidad(dict.primo, ANTERIOR_PRIMO)
+		dict.redimensionar(capacidad)
 	}
 
 	return borrado.valor
