@@ -9,12 +9,12 @@ const (
 	CAPACIDAD_MAXIMA   = 2157587
 	ANTERIOR_PRIMO     = -1
 	PROX_PRIMO         = 1
-	MAX_FC             = 0.99
+	MAX_FC             = 0.91
 	MIN_FC             = 0.1
 	FACTOR_REDIMENSION = 2
 	TABLA_VACIA        = 0
 	NO_EN_TABLA        = 0
-	///////////////////////////////
+
 	PRIMER_HASH  = 1
 	SEGUNDO_HASH = 2
 	ULTIMO_HASH  = 3
@@ -47,7 +47,7 @@ func CrearHash[K comparable, V any]() Diccionario[K, V] {
 	return dict
 }
 
-// ###### Hashear clave ------------------------------------------------------------------------------------------
+// // ###################################### HASHEAR CLAVE ####################################################
 
 func convertirABytes[K comparable](clave K) []byte {
 	return []byte(fmt.Sprintf("%v", clave))
@@ -66,52 +66,20 @@ func posicionEnTabla(opcion int, claveEnBytes []byte, largo int) int {
 	}
 }
 
-// ######## FUNCION 1 - JENKINS
-/* Hash: jenkins one-at-a-time-hash
-https://en.wikipedia.org/wiki/Jenkins_hash_function
-*/
-
-func funcionHash3(clave []byte, largo int) int {
-	posicion := jenkins(clave) % uint64(largo)
+func funcionHash1(clave []byte, largo int) int {
+	posicion := djb2(clave) % uint32(largo)
 	return int(posicion)
 }
 
-func jenkins(clave []byte) uint64 {
-	var hash uint64
-	for _, b := range clave {
-		hash += uint64(b)
-		hash += (hash << 10)
-		hash ^= (hash >> 6)
+func djb2(data []byte) uint32 {
+	hash := uint32(5381)
+
+	for _, b := range data {
+		hash += uint32(b) + hash + hash<<5
 	}
 
-	hash += (hash << 3)
-	hash ^= (hash >> 11)
-	hash += (hash << 15)
 	return hash
 }
-
-// ######### FUNCION 1 - ADLER32
-/* ###### Hash: adler32
-https://pkg.go.dev/hash/adler32
-*/
-
-//func funcionHash1(clave []byte, largo int) int {
-//	posicion := hash2.Checksum(clave) % uint32(largo)
-//	return int(posicion)
-//}
-
-//######## FUNCION 3 - CRC64
-
-//func funcionHash1(clave []byte, largo int) int {
-//	posicion := crc64.Checksum(clave, crc64.MakeTable(crc64.ISO)) % uint64(largo)
-//	return int(posicion)
-//}
-
-/*######## FUNCION 5 - FNV
-Hash: Fowler–Noll–Vo (FNV)
-https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function
-Implementación de https://golangprojectstructure.com/
-*/
 
 func funcionHash2(clave []byte, largo int) int {
 	posicion := fvnHash(clave) % uint64(largo)
@@ -134,41 +102,26 @@ func fvnHash(data []byte) (hash uint64) {
 	return
 }
 
-////####### FUNCION SDBM
-//
-//func funcionHash2(clave []byte, largo int) int {
-//	posicion := sdbmHash(clave) % uint64(largo)
-//	return int(posicion)
-//}
-//
-//func sdbmHash(data []byte) uint64 {
-//	var hash uint64
-//
-//	for _, b := range data {
-//		hash = uint64(b) + (hash << 6) + (hash << 16) - hash
-//	}
-//
-//	return hash
-//}
-
-// ######## FUNCION 2 - DJB2
-
-func funcionHash1(clave []byte, largo int) int {
-	posicion := djb2(clave) % uint32(largo)
+func funcionHash3(clave []byte, largo int) int {
+	posicion := jenkins(clave) % uint64(largo)
 	return int(posicion)
 }
 
-func djb2(data []byte) uint32 {
-	hash := uint32(5381)
-
-	for _, b := range data {
-		hash += uint32(b) + hash + hash<<5
+func jenkins(clave []byte) uint64 {
+	var hash uint64
+	for _, b := range clave {
+		hash += uint64(b)
+		hash += (hash << 10)
+		hash ^= (hash >> 6)
 	}
 
+	hash += (hash << 3)
+	hash ^= (hash >> 11)
+	hash += (hash << 15)
 	return hash
 }
 
-//############ REDIMENSION -----------------------------------------------------------------------------------------
+//// ######################################### REDIMENSION ###################################################
 
 func (dict *dictImplementacion[K, V]) nuevaCapacidad(pos int, movimiento int) int {
 	arrayPrimos := []int{CAPACIDAD_INICIAL, 257, 523, 1049, 2099, 4201, 8419, 16843, 33703, 67409, 134837, 269683, 539389, 1078787, CAPACIDAD_MAXIMA}
@@ -203,7 +156,8 @@ func sobrecarga(elementos int, largoTabla int) bool {
 	return float32(elementos)/float32(largoTabla) >= MAX_FC
 }
 
-//TODO cambiar numeros magicos
+// ###################################### BUSQUEDA Y GUARDADO #################################################
+
 func (dict *dictImplementacion[K, V]) buscar(tabla []*elementoTabla[K, V], clave K) (int, int) {
 	claveEnByte := convertirABytes(clave)
 
@@ -221,7 +175,6 @@ func (dict *dictImplementacion[K, V]) buscar(tabla []*elementoTabla[K, V], clave
 	return NO_EN_TABLA, posicionEnTabla(PRIMER_HASH, claveEnByte, len(tabla))
 }
 
-//TODO borrar codigo repetido
 func (dict *dictImplementacion[K, V]) guardarEnOcupado(tabla []*elementoTabla[K, V], elemento *elementoTabla[K, V], claveOriginal K, cnt int) bool {
 	if elemento.clave == claveOriginal {
 		return false
@@ -270,7 +223,8 @@ func (dict *dictImplementacion[K, V]) guardarEnTabla(tabla []*elementoTabla[K, V
 
 }
 
-// Guardar guarda el par clave-dato en el Diccionario. Si la clave ya se encontraba, se actualiza el dato asociado
+// ################################### PRIMITIVAS DICCIONARIO #################################################
+
 func (dict *dictImplementacion[K, V]) Guardar(claveAEvaluar K, dato V) {
 	if sobrecarga(dict.elementos+1, len(dict.tabla)) {
 		capacidad := dict.nuevaCapacidad(dict.primo, PROX_PRIMO)
@@ -281,14 +235,11 @@ func (dict *dictImplementacion[K, V]) Guardar(claveAEvaluar K, dato V) {
 
 }
 
-// Pertenece determina si una clave ya se encuentra en el diccionario, o no
 func (dict dictImplementacion[K, V]) Pertenece(clave K) bool {
 	hash, _ := dict.buscar(dict.tabla, clave)
 	return hash != NO_EN_TABLA
 }
 
-// Obtener devuelve el dato asociado a una clave. Si la clave no pertenece, debe entrar en pánico con mensaje
-// 'La clave no pertenece al diccionario'
 func (dict dictImplementacion[K, V]) Obtener(clave K) V {
 	hash, indice := dict.buscar(dict.tabla, clave)
 	if hash == NO_EN_TABLA {
@@ -297,8 +248,6 @@ func (dict dictImplementacion[K, V]) Obtener(clave K) V {
 	return dict.tabla[indice].valor
 }
 
-// Borrar borra del Diccionario la clave indicada, devolviendo el dato que se encontraba asociado. Si la clave no
-// pertenece al diccionario, debe entrar en pánico con un mensaje 'La clave no pertenece al diccionario'
 func (dict *dictImplementacion[K, V]) Borrar(clave K) V {
 	hash, indice := dict.buscar(dict.tabla, clave)
 	if hash == NO_EN_TABLA {
@@ -317,13 +266,10 @@ func (dict *dictImplementacion[K, V]) Borrar(clave K) V {
 	return borrado.valor
 }
 
-// Cantidad devuelve la cantidad de elementos dentro del diccionario
 func (dict dictImplementacion[K, V]) Cantidad() int {
 	return dict.elementos
 }
 
-// Iterar itera internamente el diccionario, aplicando la función pasada por parámetro a todos los elementos del
-// mismo
 func (dict dictImplementacion[K, V]) Iterar(visitar func(K, V) bool) {
 	for i := 0; i < len(dict.tabla); i++ {
 		if dict.tabla[i] != nil {
@@ -334,7 +280,8 @@ func (dict dictImplementacion[K, V]) Iterar(visitar func(K, V) bool) {
 	}
 }
 
-// Iterador devuelve un IterDiccionario para este Diccionario
+// ################################### PRIMITIVAS ITERADOR ###################################################
+
 func (dict *dictImplementacion[K, V]) Iterador() IterDiccionario[K, V] {
 	for i := range dict.tabla {
 		if dict.tabla[i] != nil {
@@ -344,14 +291,10 @@ func (dict *dictImplementacion[K, V]) Iterador() IterDiccionario[K, V] {
 	return &iteradorDict[K, V]{diccionario: dict, posicion: len(dict.tabla)}
 }
 
-// HaySiguiente devuelve si hay más datos para ver. Esto es, si en el lugar donde se encuentra parado
-// el iterador hay un elemento.
 func (iter *iteradorDict[K, V]) HaySiguiente() bool {
 	return iter.posicion < len(iter.diccionario.tabla)
 }
 
-// VerActual devuelve la clave y el dato del elemento actual en el que se encuentra posicionado el iterador.
-// Si no HaySiguiente, debe entrar en pánico con el mensaje 'El iterador termino de iterar'
 func (iter *iteradorDict[K, V]) VerActual() (K, V) {
 	if !iter.HaySiguiente() {
 		panic("El iterador termino de iterar")
@@ -359,9 +302,6 @@ func (iter *iteradorDict[K, V]) VerActual() (K, V) {
 	return iter.diccionario.tabla[iter.posicion].clave, iter.diccionario.tabla[iter.posicion].valor
 }
 
-// Siguiente si HaySiguiente, devuelve la clave actual (equivalente a VerActual, pero únicamente la clave), y
-// además avanza al siguiente elemento en el diccionario. Si no HaySiguiente, entonces debe entrar en pánico con
-// mensaje 'El iterador termino de iterar'
 func (iter *iteradorDict[K, V]) Siguiente() K {
 	if !iter.HaySiguiente() {
 		panic("El iterador termino de iterar")
