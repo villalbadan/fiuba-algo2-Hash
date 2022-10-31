@@ -6,7 +6,7 @@ import (
 
 const (
 	CAPACIDAD_INICIAL  = 127
-	CAPACIDAD_MAXIMA   = 2157587
+	CAPACIDAD_MAXIMA   = 34521589
 	ANTERIOR_PRIMO     = -1
 	PROX_PRIMO         = 1
 	MAX_FC             = 0.91
@@ -55,16 +55,22 @@ func convertirABytes[K comparable](clave K) []byte {
 
 func posicionEnTabla(opcion int, claveEnBytes []byte, largo int) int {
 	switch opcion {
-	case 1:
+	case PRIMER_HASH:
 		return funcionHash1(claveEnBytes, largo)
-	case 2:
+	case SEGUNDO_HASH:
 		return funcionHash2(claveEnBytes, largo)
-	case 3:
+	case ULTIMO_HASH:
 		return funcionHash3(claveEnBytes, largo)
 	default:
 		panic("HASH INVALIDO")
 	}
 }
+
+/*######## FUNCION 1 - DJB2
+Hash: DJB2
+Escrita por Daniel J. Bernstein
+Implementación de https://golangprojectstructure.com/
+*/
 
 func funcionHash1(clave []byte, largo int) int {
 	posicion := djb2(clave) % uint32(largo)
@@ -80,6 +86,12 @@ func djb2(data []byte) uint32 {
 
 	return hash
 }
+
+/*######## FUNCION 2 - FNV
+Hash: Fowler–Noll–Vo (FNV)
+https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function
+Implementación de https://golangprojectstructure.com/
+*/
 
 func funcionHash2(clave []byte, largo int) int {
 	posicion := fvnHash(clave) % uint64(largo)
@@ -101,6 +113,11 @@ func fvnHash(data []byte) (hash uint64) {
 
 	return
 }
+
+// ######## FUNCION 3 - JENKINS
+/* Hash: jenkins one-at-a-time-hash
+https://en.wikipedia.org/wiki/Jenkins_hash_function
+*/
 
 func funcionHash3(clave []byte, largo int) int {
 	posicion := jenkins(clave) % uint64(largo)
@@ -124,10 +141,14 @@ func jenkins(clave []byte) uint64 {
 //// ######################################### REDIMENSION ###################################################
 
 func (dict *dictImplementacion[K, V]) nuevaCapacidad(pos int, movimiento int) int {
-	arrayPrimos := []int{CAPACIDAD_INICIAL, 257, 523, 1049, 2099, 4201, 8419, 16843, 33703, 67409, 134837, 269683, 539389, 1078787, CAPACIDAD_MAXIMA}
+	arrayPrimos := []int{
+		CAPACIDAD_INICIAL, 257, 523, 1049, 2099, 4201, 8419, 16843,
+		33703, 67409, 134837, 269683, 539389, 1078787, 2157587, 4315183,
+		8630387, 17260781, CAPACIDAD_MAXIMA,
+	}
 
 	if pos+movimiento > len(arrayPrimos) {
-		panic("Por ahora no puede hacer un hash tan grande, lo sentimos.")
+		return len(dict.tabla) * 2
 	}
 
 	dict.primo = dict.primo + movimiento
@@ -136,6 +157,10 @@ func (dict *dictImplementacion[K, V]) nuevaCapacidad(pos int, movimiento int) in
 
 func pocaCarga(elementos int, largoTabla int) bool {
 	return float32(elementos)/float32(largoTabla) < MIN_FC && largoTabla/FACTOR_REDIMENSION > CAPACIDAD_INICIAL
+}
+
+func sobrecarga(elementos int, largoTabla int) bool {
+	return float32(elementos)/float32(largoTabla) >= MAX_FC
 }
 
 func (dict *dictImplementacion[K, V]) redimensionar(nuevaCapacidad int) {
@@ -152,17 +177,14 @@ func (dict *dictImplementacion[K, V]) redimensionar(nuevaCapacidad int) {
 	dict.tabla = nuevaTabla
 }
 
-func sobrecarga(elementos int, largoTabla int) bool {
-	return float32(elementos)/float32(largoTabla) >= MAX_FC
-}
-
-// ###################################### BUSQUEDA Y GUARDADO #################################################
+// ###################################### BÚSQUEDA Y GUARDADO #################################################
 
 func (dict *dictImplementacion[K, V]) buscar(tabla []*elementoTabla[K, V], clave K) (int, int) {
 	claveEnByte := convertirABytes(clave)
 
 	for i := PRIMER_HASH; i <= ULTIMO_HASH; i++ {
 		posicion := posicionEnTabla(i, claveEnByte, len(tabla))
+		//Si la tabla esta vacia, ya devuelve la posicion en la que la clave se encontraria según la 1ra función
 		if dict.elementos == TABLA_VACIA {
 			return NO_EN_TABLA, posicion
 		}
@@ -188,7 +210,7 @@ func (dict *dictImplementacion[K, V]) guardarEnOcupado(tabla []*elementoTabla[K,
 	}
 	indice := posicionEnTabla(nuevaOpcion, claveEnByte, len(tabla))
 	elementoAMover := tabla[indice]
-	(tabla[indice]) = &elementoTabla[K, V]{clave: elemento.clave, valor: elemento.valor, opcion: nuevaOpcion}
+	tabla[indice] = &elementoTabla[K, V]{clave: elemento.clave, valor: elemento.valor, opcion: nuevaOpcion}
 
 	if elementoAMover != nil {
 		return dict.guardarEnOcupado(tabla, elementoAMover, claveOriginal, cnt)
@@ -206,7 +228,6 @@ func (dict *dictImplementacion[K, V]) guardarEnTabla(tabla []*elementoTabla[K, V
 	}
 
 	//CLAVE NO EXISTE:
-
 	//Guardamos elemento original:
 	elementoAMover := tabla[indice]
 	tabla[indice] = &elementoTabla[K, V]{clave: claveAEvaluar, valor: dato, opcion: 1}
